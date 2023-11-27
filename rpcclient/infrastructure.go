@@ -790,13 +790,15 @@ func (c *Client) handleSendPostMessage(jReq *jsonRequest) {
 			httpReq.Header.Set(key, value)
 		}
 
-		// Configure basic access authorization.
-		user, pass, err := c.config.getAuth()
-		if err != nil {
-			jReq.responseChan <- &Response{result: nil, err: err}
-			return
+		if !c.config.DisableAuth {
+			// Configure basic access authorization.
+			user, pass, err := c.config.getAuth()
+			if err != nil {
+				jReq.responseChan <- &Response{result: nil, err: err}
+				return
+			}
+			httpReq.SetBasicAuth(user, pass)
 		}
-		httpReq.SetBasicAuth(user, pass)
 
 		httpResponse, err = c.httpClient.Do(httpReq)
 
@@ -1200,6 +1202,9 @@ type ConnConfig struct {
 	// typically "ws".
 	Endpoint string
 
+	// Disable Auth
+	DisableAuth bool
+
 	// User is the username to use to authenticate to the RPC server.
 	User string
 
@@ -1378,16 +1383,19 @@ func dial(config *ConnConfig) (*websocket.Conn, error) {
 		dialer.NetDial = proxy.Dial
 	}
 
-	// The RPC server requires basic authorization, so create a custom
-	// request header with the Authorization header set.
-	user, pass, err := config.getAuth()
-	if err != nil {
-		return nil, err
-	}
-	login := user + ":" + pass
-	auth := "Basic " + base64.StdEncoding.EncodeToString([]byte(login))
 	requestHeader := make(http.Header)
-	requestHeader.Add("Authorization", auth)
+
+	if !config.DisableAuth {
+		// The RPC server requires basic authorization, so create a custom
+		// request header with the Authorization header set.
+		user, pass, err := config.getAuth()
+		if err != nil {
+			return nil, err
+		}
+		login := user + ":" + pass
+		auth := "Basic " + base64.StdEncoding.EncodeToString([]byte(login))
+		requestHeader.Add("Authorization", auth)
+	}
 	for key, value := range config.ExtraHeaders {
 		requestHeader.Add(key, value)
 	}
